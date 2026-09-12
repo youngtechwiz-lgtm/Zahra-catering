@@ -1,44 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { getCurrentAdminSession } from '@/services/auth';
+import { type ReactNode } from 'react';
+import { Link, Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { LoaderCircle } from 'lucide-react';
 
 export function ProtectedAdminRoute({ children }: { children: ReactNode }) {
-  const navigate = useNavigate();
+  const location = useLocation();
+  const { isAdmin, loading } = useAuth();
 
-  const [status, setStatus] = useState<'checking' | 'allowed' | 'blocked'>(
-    isSupabaseConfigured ? 'checking' : 'blocked',
-  );
-
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-
-    getCurrentAdminSession()
-      .then((session) => {
-        if (session) {
-          setStatus('allowed');
-        } else {
-          setStatus('blocked');
-          navigate('/admin/login', { replace: true });
-        }
-      })
-      .catch(() => {
-        setStatus('blocked');
-        navigate('/admin/login', { replace: true });
-      });
-  }, [navigate]);
-
-  if (status === 'checking') {
-    return (
-      <div className="admin-shell flex min-h-[100dvh] items-center justify-center px-5 text-center text-[#f7efdf]">
-        <p className="font-mono-brand text-xs uppercase tracking-[.16em] text-[#d9b56b]">
-          Checking your workspace…
-        </p>
-      </div>
-    );
-  }
-
-  if (status !== 'allowed') {
+  if (!isSupabaseConfigured) {
     return (
       <div className="admin-shell flex min-h-[100dvh] items-center justify-center px-5 text-center text-[#f7efdf]">
         <div>
@@ -64,6 +34,23 @@ export function ProtectedAdminRoute({ children }: { children: ReactNode }) {
         </div>
       </div>
     );
+  }
+
+  if (loading) {
+    return (
+      <div className="admin-shell flex min-h-[100dvh] items-center justify-center px-5 text-center text-[#f7efdf]">
+        <div className="flex flex-col items-center gap-3">
+          <LoaderCircle className="animate-spin text-[#d9b56b]" size={28} />
+          <p className="font-mono-brand text-xs uppercase tracking-[.16em] text-[#d9b56b]">
+            Checking your workspace…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/admin/login" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;

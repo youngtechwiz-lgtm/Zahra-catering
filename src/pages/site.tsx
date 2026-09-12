@@ -1,22 +1,29 @@
-import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { type ComponentProps, type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Link as RouterLink, useLocation as useRouterLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowDownRight, ArrowLeft, ArrowUpRight, CalendarDays, Check, FileText,
-  Images, LayoutDashboard, Mail, Menu as MenuIcon, MessageCircle, Package,
-  Palette, Plus, Search, Settings, Sparkles, Star, Utensils, X,
+  ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronRight,
+  Clock, FileText, Images, LayoutDashboard, LogOut, Mail, MapPin, Menu as MenuIcon,
+  MessageCircle, Package, Palette, Phone, Plus, Search, Settings, Sparkles, Star, Tag, Utensils, X,
 } from 'lucide-react';
 import { DEFAULT_WHATSAPP_NUMBER, whatsappUrl } from '@/lib/whatsapp';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { createBooking } from '@/services/bookings';
 import { getCurrentSession, signInAdmin, signOutAdmin } from '@/services/auth';
-import { getSiteSettings } from '@/services/content';
+import {
+  getSiteSettings,
+  listPublicEvents,
+  listPublicGallery,
+  listPublicMenu,
+  listPublicServices,
+  listPublicTestimonials,
+} from '@/services/content';
+import { useAuth } from '@/context/AuthContext';
+import type { EventItem, GalleryItem, MenuItem, Service, Testimonial } from '@/types/content';
 
 type IconType = typeof Utensils;
 
-type LinkProps = Omit<ComponentProps<typeof RouterLink>, 'to'> & {
-  href: string;
-};
+type LinkProps = Omit<ComponentProps<typeof RouterLink>, 'to'> & { href: string };
 
 function Link({ href, ...props }: LinkProps) {
   return <RouterLink to={href} {...props} />;
@@ -32,172 +39,1431 @@ function useWhatsAppNumber() {
   const [number, setNumber] = useState(DEFAULT_WHATSAPP_NUMBER);
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    getSiteSettings().then((settings) => {
-      if (settings?.whatsapp) setNumber(settings.whatsapp);
-    }).catch(() => undefined);
+    getSiteSettings()
+      .then((settings) => {
+        if (settings?.whatsapp) setNumber(settings.whatsapp);
+      })
+      .catch(() => undefined);
   }, []);
   return number;
 }
 
-const menuItems = [
-  { id: 1, category: 'Welcome to the table', name: 'ZAHRA house jollof', description: 'Smoky tomato rice, charred peppers, thyme oil', price: '₦8,500' },
-  { id: 2, category: 'Welcome to the table', name: 'Coconut curry prawns', description: 'Tiger prawns, coconut, lime leaf, toasted rice', price: '₦14,000' },
-  { id: 3, category: 'The centrepiece', name: 'Citrus suya chicken', description: 'Yaji spice, grilled citrus, green herb relish', price: '₦12,500' },
-  { id: 4, category: 'The centrepiece', name: 'Miso-glazed sea bass', description: 'Spring onion, sesame, pickled cucumber', price: '₦18,000' },
-  { id: 5, category: 'To finish', name: 'Mango & ginger pavlova', description: 'Crisp meringue, ripe mango, ginger cream', price: '₦7,000' },
-  { id: 6, category: 'To finish', name: 'Warm chin chin sundae', description: 'Vanilla bean, salted caramel, spiced crunch', price: '₦6,500' },
+// Curated luxury fallback assets and data
+export const fallbackMenuItems = [
+  {
+    id: 'f1',
+    category: 'Welcome Bites',
+    name: 'Truffle & Peppered Prawn Canapés',
+    description: 'Crispy plantain crouton, wild Atlantic king prawns, ata rodo glaze, micro chervil.',
+    price: 14500,
+    image_url: '/canapes-cocktail.jpg',
+  },
+  {
+    id: 'f2',
+    category: 'Centrepieces',
+    name: 'ZAHRA Heritage Firewood Jollof',
+    description: 'Slow-smoked long grain basmati, charred heirloom plum tomatoes, thyme essence, roasted sweet bone marrow.',
+    price: 9500,
+    image_url: '/gourmet-jollof.jpg',
+  },
+  {
+    id: 'f3',
+    category: 'Feasts',
+    name: 'Yaji Prime Suya Ribeye Medallions',
+    description: 'Dry-aged beef tenderloin, artisan Northern yaji rub, blistered shallots, citrus herb jus.',
+    price: 18500,
+    image_url: '/dish-detail.jpg',
+  },
+  {
+    id: 'f4',
+    category: 'Feasts',
+    name: 'Citrus & Lemongrass Braised Sea Bass',
+    description: 'Pan-seared coastal sea bass, wild lemongrass infusion, pickled cucumber ribbons, toasted sesame oil.',
+    price: 21000,
+    image_url: '/hero-table.jpg',
+  },
+  {
+    id: 'f5',
+    category: 'Sweets',
+    name: 'Spiced Mango & Coconut Pavlova',
+    description: 'Crisp golden meringue, ripe sweet Benue mango, whipped ginger-infused coconut cream, edible gold leaf.',
+    price: 7500,
+    image_url: '/canapes-cocktail.jpg',
+  },
+  {
+    id: 'f6',
+    category: 'Sweets',
+    name: 'Salted Caramel Chin Chin Sundae',
+    description: 'Artisanal vanilla bean gelato, warm spiced chin chin crumb, rich salted palm-sugar caramel drizzle.',
+    price: 7000,
+    image_url: '/dish-detail.jpg',
+  },
 ];
 
-const services = [
-  { id: 'weddings', number: '01', title: 'Weddings', description: 'A menu that holds the room, from your first tasting to the last dance.', icon: Sparkles, detail: 'Full-service dining, family-style feasts and late-night bites for the day you have imagined.' },
-  { id: 'private', number: '02', title: 'Private dining', description: 'Restaurant-level detail, in the place that means something to you.', icon: Utensils, detail: 'Intimate dinners, milestone birthdays and candlelit tables built around your people.' },
-  { id: 'corporate', number: '03', title: 'Corporate events', description: 'Thoughtful food for launches, off-sites and rooms full of new ideas.', icon: Package, detail: 'Breakfast meetings, team celebrations, brand moments and polished service without the fuss.' },
-  { id: 'celebrations', number: '04', title: 'Intimate celebrations', description: 'Small can be just as memorable. We make every plate count.', icon: Star, detail: 'Anniversaries, birthdays and the beautiful in-between occasions worth marking.' },
+export const fallbackServices = [
+  {
+    id: 'weddings',
+    number: '01',
+    title: 'Luxury Wedding Banquets',
+    description: 'Curated dining that anchors your celebration, from intimate cocktail canapés to grand multi-course banquets.',
+    detail: 'Complete white-glove table service, bespoke menu tastings, signature late-night firewood suya bars, and artisanal drinks coordination.',
+    image: '/wedding-banquet.jpg',
+  },
+  {
+    id: 'private',
+    number: '02',
+    title: 'Private Chef Suppers',
+    description: 'Michelin-caliber culinary storytelling crafted exclusively for your home or private venue.',
+    detail: 'Custom seasonal menus, tablescape styling, dedicated private chefs, and personalized course pairings for milestone gatherings.',
+    image: '/gourmet-jollof.jpg',
+  },
+  {
+    id: 'corporate',
+    number: '03',
+    title: 'Corporate Galas & Summits',
+    description: 'Sophisticated hospitality designed to impress investors, clients, and distinguished delegates.',
+    detail: 'Punctual breakfast buffets, executive boardroom bento feasting, VIP cocktail receptions, and high-volume banquet mastery.',
+    image: '/canapes-cocktail.jpg',
+  },
+  {
+    id: 'celebrations',
+    number: '04',
+    title: 'Intimate Celebrations',
+    description: 'Making small gatherings extraordinary with unforgettable attention to every single plate.',
+    detail: 'Milestone birthdays, anniversary dinners, and family milestones elevated with warmth, generous portions, and refined presentation.',
+    image: '/hero-table.jpg',
+  },
 ];
 
-const gallery = [
-  { id: 'g1', tag: 'Weddings', title: 'The courtyard supper', image: '/hero-table.jpg', size: 'tall' },
-  { id: 'g2', tag: 'Private dining', title: 'A table for twelve', image: '/dish-detail.jpg', size: 'wide' },
-  { id: 'g3', tag: 'Corporate', title: 'Good work, well fed', image: '/hero-table.jpg', size: 'square' },
-  { id: 'g4', tag: 'Birthdays', title: 'A little more sparkle', image: '/dish-detail.jpg', size: 'square' },
+export const fallbackGallery = [
+  { id: 'g1', category: 'Weddings', caption: 'Grand Ballroom Banquet, Victoria Island', image_url: '/wedding-banquet.jpg' },
+  { id: 'g2', category: 'Plating', caption: 'Heritage Jollof with Glazed Plantain & Suya Medallion', image_url: '/gourmet-jollof.jpg' },
+  { id: 'g3', category: 'Cocktails', caption: 'Artisanal Hors d’oeuvres & Champagne Service', image_url: '/canapes-cocktail.jpg' },
+  { id: 'g4', category: 'Private Dining', caption: 'An intimate candlelit table for sixteen guests', image_url: '/hero-table.jpg' },
+  { id: 'g5', category: 'Bespoke Details', caption: 'Handcrafted sauces and seasonal garnishes', image_url: '/dish-detail.jpg' },
+  { id: 'g6', category: 'Weddings', caption: 'Golden hour courtyard cocktail reception', image_url: '/wedding-banquet.jpg' },
 ];
 
-const events = [
-  { date: '14.06.24', title: 'A garden wedding for 96', location: 'Lagos', type: 'Wedding', image: '/hero-table.jpg', text: 'A sun-warmed, family-style feast with a late-night suya bar.' },
-  { date: '28.04.24', title: 'The Sunday table', location: 'Ikoyi', type: 'Private dining', image: '/dish-detail.jpg', text: 'Twelve guests, five courses, and a table that kept the conversation going.' },
-  { date: '09.03.24', title: 'The makers lunch', location: 'Victoria Island', type: 'Corporate', image: '/hero-table.jpg', text: 'A bright, generous lunch for a room full of people building what is next.' },
+export const fallbackEvents = [
+  {
+    id: 'e1',
+    event_date: 'October 2024',
+    title: 'The Alara Garden Wedding Banquet',
+    location: 'Ikoyi, Lagos',
+    description: 'A 250-guest celebration featuring a 4-course seated Nigerian heritage dinner followed by a midnight suya & cocktail bar.',
+    cover_image_url: '/wedding-banquet.jpg',
+  },
+  {
+    id: 'e2',
+    event_date: 'August 2024',
+    title: 'The Founders Private Supper',
+    location: 'Victoria Island, Lagos',
+    description: 'An intimate candlelit gathering for 20 tech innovators, curated around smoky coastal seafood and rare indigenous spices.',
+    cover_image_url: '/gourmet-jollof.jpg',
+  },
+  {
+    id: 'e3',
+    event_date: 'May 2024',
+    title: 'Bankers Annual Gala & Dinner',
+    location: 'Eko Atlantic, Lagos',
+    description: 'Full-scale banquet catering for 600 international guests with simultaneous multi-station hot feasts and artisanal dessert tables.',
+    cover_image_url: '/canapes-cocktail.jpg',
+  },
 ];
 
-const testimonials = [
-  { quote: 'The food was the first thing people talked about, and the last thing they wanted to leave.', name: 'Tolu A.', event: 'Private dinner · Lagos' },
-  { quote: 'ZAHRA understood the feeling we wanted before we knew how to describe it. Every detail landed.', name: 'Mariam O.', event: 'Wedding · Ibadan' },
-  { quote: 'Warm, precise and completely unflustered. Our guests felt looked after from the first plate.', name: 'Kene E.', event: 'Corporate lunch · Lagos' },
+export const fallbackTestimonials = [
+  {
+    id: 't1',
+    customer_name: 'Dr. Folake & Babatunde Adeleke',
+    review: 'The food was not just catering—it was the crowning glory of our wedding day. Six months later, guests still talk about the firewood jollof and the prawns.',
+    event: 'Wedding Banquet · Landmark Lagos',
+  },
+  {
+    id: 't2',
+    customer_name: 'Kemi Olusanya',
+    review: 'ZAHRA brought an effortless luxury to my 40th birthday. The team arrived with quiet elegance, and the table styling felt straight out of Architectural Digest.',
+    event: 'Private Chef Supper · Ikoyi',
+  },
+  {
+    id: 't3',
+    customer_name: 'Emeka Nwosu, Sterling Partners',
+    review: 'Flawless execution for our end-of-year executive summit. The service was prompt, the food was piping hot, and the flavors were outstanding.',
+    event: 'Corporate Gala · Eko Atlantic',
+  },
 ];
 
-function Wordmark({ inverse = false }: { inverse?: boolean }) {
-  return <Link href="/" className={`flex items-center gap-2 group ${inverse ? 'text-[#f7efdf]' : 'text-[#38263b]'}`} data-testid="link-home">
-    <span className="font-display text-[2rem] leading-none tracking-[-.08em]">ZAHRA</span>
-    <span className="mt-1 h-2 w-2 rounded-full bg-[#de674f] transition-transform group-hover:scale-150" />
-  </Link>;
+export function Wordmark({ inverse = false }: { inverse?: boolean }) {
+  return (
+    <Link
+      href="/"
+      className={`group flex items-center gap-2.5 transition-opacity hover:opacity-90 ${
+        inverse ? 'text-[#fcfaf7]' : 'text-[#181318]'
+      }`}
+      data-testid="link-home"
+    >
+      <span className="font-display text-[2.1rem] font-semibold leading-none tracking-[-0.06em]">
+        ZAHRA
+      </span>
+      <span className="h-2 w-2 rounded-full bg-[#c89f56] shadow-[0_0_8px_rgba(200,159,86,0.6)] transition-transform duration-300 group-hover:scale-150" />
+    </Link>
+  );
 }
 
 export function PublicShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
-  const links = [['/', 'Home'], ['/about', 'Our story'], ['/services', 'Services'], ['/menu', 'Menu'], ['/gallery', 'Gallery'], ['/events', 'Events']];
-  return <div className="public-shell min-h-[100dvh] grain">
-    <header className="relative z-40 border-b border-[#38263b]/15">
-      <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 md:px-10">
-        <Wordmark />
-        <nav className="hidden items-center gap-7 md:flex" aria-label="Primary navigation">
-          {links.map(([href, label]) => <Link key={href} href={href} aria-current={location === href ? 'page' : undefined} className="nav-link text-[11px] font-semibold uppercase tracking-[.18em] text-[#38263b]/75 hover:text-[#38263b]" data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`}>{label}</Link>)}
-        </nav>
-        <div className="hidden items-center gap-4 md:flex">
-          <Link href="/contact" className="group flex items-center gap-2 rounded-full bg-[#38263b] px-5 py-3 text-[11px] font-semibold uppercase tracking-[.15em] text-[#f7efdf] transition hover:bg-[#de674f]" data-testid="link-book-header">Plan an event <ArrowUpRight size={14} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" /></Link>
-        </div>
-        <button className="md:hidden" onClick={() => setOpen(!open)} aria-label="Toggle navigation" data-testid="button-toggle-navigation">{open ? <X /> : <MenuIcon />}</button>
+  const [scrolled, setScrolled] = useState(false);
+  const whatsappNumber = useWhatsAppNumber();
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 24);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const links = [
+    ['/', 'Home'],
+    ['/about', 'Our Story'],
+    ['/menu', 'Menu'],
+    ['/services', 'Services'],
+    ['/gallery', 'Gallery'],
+    ['/events', 'Events'],
+    ['/testimonials', 'Kind Words'],
+  ];
+
+  return (
+    <div className="public-shell min-h-[100dvh] bg-[#fcfaf7] text-[#181318] antialiased selection:bg-[#c89f56]/25 selection:text-[#181318]">
+      {/* Top utility alert bar */}
+      <div className="border-b border-[#181318]/8 bg-[#181318] px-4 py-2 text-center text-[10px] font-medium tracking-[0.2em] text-[#dfbc7a] uppercase">
+        <span>Bespoke Nigerian & Continental Catering · Lagos & Nationwide · Taking 2025–2026 Dates</span>
       </div>
-      {open && <div className="border-t border-[#38263b]/15 bg-[#f7efdf] px-5 py-5 md:hidden">
-        <nav className="flex flex-col gap-4">{links.map(([href, label]) => <Link key={href} onClick={() => setOpen(false)} href={href} className="text-sm font-semibold uppercase tracking-[.14em]" data-testid={`link-mobile-${label.toLowerCase().replaceAll(' ', '-')}`}>{label}</Link>)}</nav>
-        <Link href="/contact" onClick={() => setOpen(false)} className="mt-5 flex w-full justify-center rounded-full bg-[#38263b] px-5 py-3 text-xs font-semibold uppercase tracking-[.15em] text-[#f7efdf]" data-testid="link-mobile-book">Plan an event</Link>
-      </div>}
-    </header>
-    <main>{children}</main>
-    <Footer />
-  </div>;
+
+      {/* Main sticky navigation */}
+      <header
+        className={`sticky top-0 z-50 transition-all duration-300 ${
+          scrolled
+            ? 'border-b border-[#181318]/10 bg-[#fcfaf7]/95 shadow-sm backdrop-blur-md'
+            : 'border-b border-[#181318]/6 bg-[#fcfaf7]/85 backdrop-blur-sm'
+        }`}
+      >
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-4.5 md:px-10">
+          <Wordmark />
+
+          {/* Desktop Links */}
+          <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary navigation">
+            {links.map(([href, label]) => {
+              const active = location === href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={active ? 'page' : undefined}
+                  className={`relative py-1 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors duration-200 ${
+                    active
+                      ? 'text-[#181318]'
+                      : 'text-[#181318]/65 hover:text-[#c89f56]'
+                  }`}
+                  data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`}
+                >
+                  {label}
+                  {active && (
+                    <motion.span
+                      layoutId="nav-underline"
+                      className="absolute inset-x-0 -bottom-1 h-[2px] bg-[#c89f56]"
+                    />
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Header Action Button */}
+          <div className="hidden items-center gap-4 md:flex">
+            <a
+              href={whatsappUrl(whatsappNumber)}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 text-xs font-semibold text-[#181318]/70 transition hover:text-[#c89f56]"
+              title="Chat directly with our banquet concierge"
+            >
+              <MessageCircle size={15} className="text-[#c89f56]" />
+              <span className="hidden xl:inline">WhatsApp</span>
+            </a>
+            <Link
+              href="/contact"
+              className="group flex items-center gap-2 rounded-full border border-[#181318] bg-[#181318] px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.16em] text-[#fcfaf7] shadow-sm transition-all duration-300 hover:border-[#c89f56] hover:bg-[#c89f56] hover:text-[#181318]"
+              data-testid="link-book-header"
+            >
+              Plan an Event
+              <ArrowUpRight
+                size={14}
+                className="transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+              />
+            </Link>
+          </div>
+
+          {/* Mobile hamburger toggle */}
+          <button
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-[#181318]/15 text-[#181318] transition hover:border-[#c89f56] lg:hidden"
+            onClick={() => setOpen(!open)}
+            aria-label="Toggle navigation"
+            data-testid="button-toggle-navigation"
+          >
+            {open ? <X size={20} /> : <MenuIcon size={20} />}
+          </button>
+        </div>
+
+        {/* Mobile Navigation Drawer */}
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25 }}
+              className="overflow-hidden border-b border-[#181318]/10 bg-[#fcfaf7] px-6 py-8 shadow-xl lg:hidden"
+            >
+              <nav className="flex flex-col gap-4">
+                {links.map(([href, label]) => {
+                  const active = location === href;
+                  return (
+                    <Link
+                      key={href}
+                      onClick={() => setOpen(false)}
+                      href={href}
+                      className={`flex items-center justify-between border-b border-[#181318]/8 py-2.5 text-base font-medium tracking-[0.06em] ${
+                        active ? 'font-semibold text-[#c89f56]' : 'text-[#181318]'
+                      }`}
+                      data-testid={`link-mobile-${label.toLowerCase().replaceAll(' ', '-')}`}
+                    >
+                      <span>{label}</span>
+                      <ChevronRight size={16} className="text-[#181318]/30" />
+                    </Link>
+                  );
+                })}
+              </nav>
+
+              <div className="mt-8 space-y-3">
+                <Link
+                  href="/contact"
+                  onClick={() => setOpen(false)}
+                  className="flex w-full items-center justify-center gap-2 rounded-full bg-[#181318] py-3.5 text-xs font-bold uppercase tracking-[0.16em] text-[#fcfaf7] shadow-sm transition hover:bg-[#c89f56] hover:text-[#181318]"
+                  data-testid="link-mobile-book"
+                >
+                  Plan an Event <ArrowUpRight size={15} />
+                </Link>
+
+                <a
+                  href={whatsappUrl(whatsappNumber)}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setOpen(false)}
+                  className="flex w-full items-center justify-center gap-2 rounded-full border border-[#181318]/20 bg-transparent py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#181318]"
+                >
+                  <MessageCircle size={16} className="text-[#c89f56]" />
+                  Chat on WhatsApp
+                </a>
+              </div>
+
+              <div className="mt-8 border-t border-[#181318]/10 pt-4 text-center font-mono-brand text-[10px] tracking-[0.15em] text-[#181318]/50 uppercase">
+                Victoria Island, Lagos · +234 907 962 2010
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </header>
+
+      <main>{children}</main>
+
+      <Footer />
+    </div>
+  );
 }
 
 function Footer() {
   const whatsappNumber = useWhatsAppNumber();
-  return <footer className="bg-[#38263b] px-5 py-12 text-[#f7efdf] md:px-10 md:py-20">
-    <div className="mx-auto max-w-[1440px]">
-      <div className="grid gap-12 md:grid-cols-[1.4fr_.8fr_.8fr]">
-        <div><Wordmark inverse /><p className="mt-8 max-w-sm font-display text-3xl leading-[1.05] text-[#f7efdf] md:text-5xl">Good food makes a room feel like yours.</p></div>
-        <div><p className="mb-5 font-mono-brand text-[10px] uppercase tracking-[.18em] text-[#d9b56b]">Explore</p><div className="flex flex-col gap-3 text-sm text-[#f7efdf]/70"><Link href="/about" data-testid="link-footer-about">Our story</Link><Link href="/services" data-testid="link-footer-services">Services</Link><Link href="/menu" data-testid="link-footer-menu">Menu</Link><Link href="/gallery" data-testid="link-footer-gallery">Gallery</Link></div></div>
-        <div><p className="mb-5 font-mono-brand text-[10px] uppercase tracking-[.18em] text-[#d9b56b]">Say hello</p><a href={whatsappUrl(whatsappNumber)} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-[#f7efdf]/80 hover:text-[#d9b56b]" data-testid="link-footer-whatsapp"><MessageCircle size={16} /> WhatsApp us</a><a href="mailto:hello@zahra.ng" className="mt-3 flex items-center gap-2 text-sm text-[#f7efdf]/80 hover:text-[#d9b56b]" data-testid="link-footer-email"><Mail size={16} /> hello@zahra.ng</a></div>
+
+  return (
+    <footer className="relative overflow-hidden bg-[#181318] px-5 py-16 text-[#fcfaf7] md:px-10 md:py-24">
+      {/* Decorative ambient gold glow */}
+      <div className="pointer-events-none absolute -left-40 top-0 h-96 w-96 rounded-full bg-[#c89f56]/10 blur-3xl" />
+      <div className="pointer-events-none absolute -right-40 bottom-0 h-96 w-96 rounded-full bg-[#c89f56]/10 blur-3xl" />
+
+      <div className="relative mx-auto max-w-[1440px]">
+        <div className="grid gap-12 border-b border-[#fcfaf7]/12 pb-16 lg:grid-cols-[1.4fr_0.8fr_0.8fr_1fr] lg:pb-20">
+          {/* Brand Col */}
+          <div>
+            <Wordmark inverse />
+            <p className="mt-6 max-w-md font-display text-2xl font-light leading-snug tracking-[-0.02em] text-[#fcfaf7]/90 md:text-3xl">
+              Where culinary heritage meets modern banquet elegance.
+            </p>
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#fcfaf7]/55">
+              Curating exceptional food, seamless hospitality, and unforgettable tables for Nigeria's most celebrated occasions since 2019.
+            </p>
+          </div>
+
+          {/* Explore Col */}
+          <div>
+            <p className="mb-5 font-mono-brand text-[10px] font-bold tracking-[0.22em] text-[#dfbc7a] uppercase">
+              Explore
+            </p>
+            <div className="flex flex-col gap-3 text-sm text-[#fcfaf7]/70">
+              <Link href="/about" className="transition hover:text-[#dfbc7a]">Our Story & Ethos</Link>
+              <Link href="/menu" className="transition hover:text-[#dfbc7a]">Digital Menu</Link>
+              <Link href="/services" className="transition hover:text-[#dfbc7a]">Catering Services</Link>
+              <Link href="/gallery" className="transition hover:text-[#dfbc7a]">Visual Gallery</Link>
+              <Link href="/events" className="transition hover:text-[#dfbc7a]">Event Stories</Link>
+              <Link href="/testimonials" className="transition hover:text-[#dfbc7a]">Client Reviews</Link>
+            </div>
+          </div>
+
+          {/* Services Col */}
+          <div>
+            <p className="mb-5 font-mono-brand text-[10px] font-bold tracking-[0.22em] text-[#dfbc7a] uppercase">
+              Occasions
+            </p>
+            <div className="flex flex-col gap-3 text-sm text-[#fcfaf7]/70">
+              <Link href="/services" className="transition hover:text-[#dfbc7a]">Wedding Banquets</Link>
+              <Link href="/services" className="transition hover:text-[#dfbc7a]">Private Chef Suppers</Link>
+              <Link href="/services" className="transition hover:text-[#dfbc7a]">Corporate Galas</Link>
+              <Link href="/services" className="transition hover:text-[#dfbc7a]">Cocktail Canapés</Link>
+              <Link href="/services" className="transition hover:text-[#dfbc7a]">Milestone Celebrations</Link>
+            </div>
+          </div>
+
+          {/* Concierge Col */}
+          <div>
+            <p className="mb-5 font-mono-brand text-[10px] font-bold tracking-[0.22em] text-[#dfbc7a] uppercase">
+              Banquet Concierge
+            </p>
+            <div className="space-y-3.5 text-sm text-[#fcfaf7]/70">
+              <p className="flex items-start gap-2.5">
+                <MapPin size={16} className="mt-0.5 shrink-0 text-[#dfbc7a]" />
+                <span>Victoria Island & Ikoyi, Lagos · Available Nationwide</span>
+              </p>
+              <a
+                href={whatsappUrl(whatsappNumber)}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2.5 text-[#fcfaf7]/85 transition hover:text-[#dfbc7a]"
+                data-testid="link-footer-whatsapp"
+              >
+                <MessageCircle size={16} className="text-[#dfbc7a]" />
+                <span>WhatsApp: {whatsappNumber}</span>
+              </a>
+              <a
+                href="mailto:hello@zahra.ng"
+                className="flex items-center gap-2.5 text-[#fcfaf7]/85 transition hover:text-[#dfbc7a]"
+                data-testid="link-footer-email"
+              >
+                <Mail size={16} className="text-[#dfbc7a]" />
+                <span>hello@zahra.ng</span>
+              </a>
+              <div className="mt-4 pt-2 font-mono-brand text-[10px] tracking-[0.14em] text-[#fcfaf7]/40 uppercase">
+                Lagos Office · Mon - Sat: 9:00 AM - 6:00 PM (GMT+1)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom copyright bar */}
+        <div className="flex flex-col items-center justify-between gap-4 pt-8 font-mono-brand text-[11px] tracking-[0.14em] text-[#fcfaf7]/40 uppercase md:flex-row">
+          <span>© {new Date().getFullYear()} ZAHRA Catering Services Limited. All rights reserved.</span>
+          <div className="flex items-center gap-6">
+            <Link href="/contact" className="hover:text-[#dfbc7a]">Book Consultation</Link>
+            <span className="text-[#fcfaf7]/20">•</span>
+            <Link href="/admin/login" className="text-[#dfbc7a]/70 hover:text-[#dfbc7a]" data-testid="link-admin-login">
+              Team Workspace
+            </Link>
+          </div>
+        </div>
       </div>
-      <div className="mt-16 flex flex-col justify-between gap-3 border-t border-[#f7efdf]/15 pt-5 font-mono-brand text-[10px] uppercase tracking-[.12em] text-[#f7efdf]/45 md:flex-row"><span>© 2024 ZAHRA Catering Service</span><Link href="/admin/login" className="hover:text-[#d9b56b]" data-testid="link-admin-login">Team sign in</Link></div>
-    </div>
-  </footer>;
+    </footer>
+  );
 }
 
-export function SectionIntro({ eyebrow, title, copy }: { eyebrow: string; title: ReactNode; copy?: string }) {
-  return <div className="grid gap-5 md:grid-cols-[.7fr_1.3fr] md:items-end"><div className="font-mono-brand text-[10px] uppercase tracking-[.2em] text-[#de674f]">{eyebrow}</div><div><h1 className="font-display text-5xl leading-[.92] tracking-[-.05em] text-[#38263b] md:text-7xl">{title}</h1>{copy && <p className="mt-6 max-w-lg text-base leading-relaxed text-[#38263b]/65">{copy}</p>}</div></div>;
+export function SectionIntro({
+  eyebrow,
+  title,
+  copy,
+  inverse = false,
+}: {
+  eyebrow: string;
+  title: ReactNode;
+  copy?: string;
+  inverse?: boolean;
+}) {
+  const tone = inverse ? 'text-[#fcfaf7]' : 'text-[#181318]';
+  const muted = inverse ? 'text-[#fcfaf7]/65' : 'text-[#181318]/65';
+  const accent = inverse ? 'text-[#dfbc7a]' : 'text-[#c89f56]';
+
+  return (
+    <div className="grid gap-6 md:grid-cols-[0.4fr_1.6fr] md:items-end">
+      <div className="flex items-center gap-2.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#c89f56]" />
+        <span className={`font-mono-brand text-[10px] font-bold uppercase tracking-[0.24em] ${accent}`}>
+          {eyebrow}
+        </span>
+      </div>
+      <div>
+        <h2 className={`font-display text-4xl font-normal leading-[0.92] tracking-[-0.04em] sm:text-5xl md:text-7xl ${tone}`}>
+          {title}
+        </h2>
+        {copy && (
+          <p className={`mt-5 max-w-2xl text-sm leading-[1.8] sm:text-base ${muted}`}>
+            {copy}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function HomePage() {
-  return <PublicShell>
-    <section className="relative overflow-hidden px-5 pb-16 pt-12 md:px-10 md:pb-28 md:pt-20">
-      <div className="mx-auto grid max-w-[1440px] gap-10 md:grid-cols-[.92fr_1.08fr] md:items-center">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .7 }} className="relative z-10">
-          <p className="mb-6 font-mono-brand text-[10px] uppercase tracking-[.24em] text-[#de674f]">Catering for the beautifully considered</p>
-          <h1 className="font-display text-[4.6rem] leading-[.83] tracking-[-.07em] text-[#38263b] sm:text-[6.5rem] md:text-[8.7rem]">Make it<br /><em className="ml-[.2em] text-[#de674f]">a table</em><br />to remember.</h1>
-          <p className="mt-8 max-w-md text-base leading-relaxed text-[#38263b]/65 md:ml-2">Food with a point of view, service with a soft touch. We cater weddings, dinners and the reasons you gather.</p>
-          <div className="mt-8 flex flex-wrap items-center gap-5"><Link href="/contact" className="group flex items-center gap-3 rounded-full bg-[#de674f] px-6 py-4 text-xs font-bold uppercase tracking-[.13em] text-[#f7efdf] transition hover:bg-[#38263b]" data-testid="link-hero-enquire">Start a conversation <ArrowUpRight size={16} className="transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" /></Link><Link href="/menu" className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.13em] text-[#38263b] hover:text-[#de674f]" data-testid="link-hero-menu">See the menu <ArrowDownRight size={15} /></Link></div>
-        </motion.div>
-        <motion.div initial={{ opacity: 0, scale: .97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .9, delay: .15 }} className="relative min-h-[420px] md:min-h-[650px]">
-          <div className="absolute inset-x-5 top-0 h-[88%] overflow-hidden rounded-[9rem_9rem_1rem_1rem] bg-[#d9b56b] md:inset-x-12"><img src="/hero-table.jpg" alt="A warm ZAHRA catering table set for dinner" className="h-full w-full object-cover object-center mix-blend-multiply opacity-90" /><div className="absolute inset-0 bg-[#de674f]/10" /></div>
-          <div className="absolute bottom-0 left-0 flex h-32 w-32 items-center justify-center rounded-full bg-[#38263b] text-center text-[10px] uppercase leading-relaxed tracking-[.14em] text-[#f7efdf] md:h-40 md:w-40">Made for<br />your people<br /><span className="text-[#d9b56b]">+</span></div>
-          <div className="absolute right-0 top-1/2 hidden -translate-y-1/2 rotate-90 font-mono-brand text-[9px] uppercase tracking-[.22em] text-[#38263b]/55 md:block">Lagos · Nigeria · 2024</div>
-        </motion.div>
-      </div>
-    </section>
-    <div className="overflow-hidden border-y border-[#38263b]/15 py-4"><div className="marquee-track flex w-max items-center gap-8 whitespace-nowrap font-display text-xl text-[#38263b]/70">{Array.from({ length: 6 }).map((_, i) => <span key={i}>Good food, good company <b className="mx-8 text-[#de674f]">+</b></span>)}</div></div>
-    <section className="px-5 py-20 md:px-10 md:py-32"><div className="mx-auto max-w-[1440px]"><SectionIntro eyebrow="01 — The ZAHRA way" title={<>The meal is only<br /><em className="text-[#de674f]">the beginning.</em></>} copy="We believe a great event has a rhythm. A warm welcome, an unexpected bite, a plate that makes everyone pause. Our job is to make that rhythm feel effortless." /><div className="mt-14 grid gap-5 md:grid-cols-[1.35fr_.65fr]"><div className="overflow-hidden rounded-[1rem_5rem_1rem_1rem] bg-[#d9b56b]"><img src="/dish-detail.jpg" alt="Plated citrus-glazed dish" className="h-[380px] w-full object-cover md:h-[500px]" /></div><div className="flex flex-col justify-between rounded-[1rem] bg-[#e6d7b9] p-7 md:p-10"><div><span className="font-display text-6xl text-[#de674f]">“</span><p className="font-display text-3xl leading-[1.05] text-[#38263b]">A little drama on the plate. A lot of ease in the room.</p></div><Link href="/about" className="group flex items-center gap-2 text-xs font-bold uppercase tracking-[.15em] text-[#38263b]" data-testid="link-home-story">Meet the people behind the plates <ArrowUpRight size={15} className="transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" /></Link></div></div></div></section>
-    <ServicesPreview />
-    <section className="bg-[#de674f] px-5 py-20 text-[#f7efdf] md:px-10 md:py-28"><div className="mx-auto max-w-[1100px] text-center"><p className="font-mono-brand text-[10px] uppercase tracking-[.2em] text-[#38263b]/70">Have a date in mind?</p><h2 className="mt-5 font-display text-5xl leading-[.9] tracking-[-.05em] md:text-8xl">Let's make<br /><em>something lovely.</em></h2><Link href="/contact" className="mt-10 inline-flex items-center gap-3 rounded-full bg-[#38263b] px-7 py-4 text-xs font-bold uppercase tracking-[.15em] text-[#f7efdf] transition hover:bg-[#f7efdf] hover:text-[#38263b]" data-testid="link-home-final-cta">Tell us about it <ArrowUpRight size={16} /></Link></div></section>
-  </PublicShell>;
-}
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
+  const [eventStories, setEventStories] = useState<EventItem[]>([]);
+  const [testimonialsList, setTestimonialsList] = useState<Testimonial[]>([]);
+  const [activeMenuCategory, setActiveMenuCategory] = useState('All');
+  const [lightbox, setLightbox] = useState<{ url: string; title: string; category?: string } | null>(null);
 
-function ServicesPreview() {
-  return <section className="bg-[#38263b] px-5 py-20 text-[#f7efdf] md:px-10 md:py-28"><div className="mx-auto max-w-[1440px]"><SectionIntro eyebrow="02 — What we do" title={<>The right food<br /><em className="text-[#d9b56b]">for the feeling.</em></>} /><div className="mt-14 grid divide-y divide-[#f7efdf]/15 border-y border-[#f7efdf]/15 md:grid-cols-2 md:divide-x md:divide-y-0">{services.slice(0, 4).map((service) => <Link href={`/services#${service.id}`} key={service.id} className="group flex gap-5 p-6 pl-0 md:p-8 md:pl-8" data-testid={`link-service-preview-${service.id}`}><span className="font-mono-brand text-[10px] text-[#d9b56b]">{service.number}</span><div className="flex-1"><service.icon size={21} strokeWidth={1.3} className="mb-8 text-[#de674f]" /><h3 className="font-display text-3xl">{service.title}</h3><p className="mt-3 max-w-xs text-sm leading-relaxed text-[#f7efdf]/55">{service.description}</p></div><ArrowUpRight size={17} className="text-[#f7efdf]/40 transition-transform group-hover:-translate-y-1 group-hover:translate-x-1" /></Link>)}</div></div></section>;
+  // Load real Supabase data on mount
+  useEffect(() => {
+    if (isSupabaseConfigured) {
+      listPublicMenu()
+        .then((res) => {
+          if (res?.items && res.items.length > 0) {
+            setMenuItems(res.items);
+          }
+        })
+        .catch(() => undefined);
+
+      listPublicServices()
+        .then((res) => {
+          if (res && res.length > 0) setServices(res);
+        })
+        .catch(() => undefined);
+
+      listPublicGallery()
+        .then((res) => {
+          if (res && res.length > 0) setGalleryItems(res);
+        })
+        .catch(() => undefined);
+
+      listPublicEvents()
+        .then((res) => {
+          if (res && res.length > 0) setEventStories(res);
+        })
+        .catch(() => undefined);
+
+      listPublicTestimonials()
+        .then((res) => {
+          if (res && res.length > 0) setTestimonialsList(res);
+        })
+        .catch(() => undefined);
+    }
+  }, []);
+
+  // Display data: live Supabase data first, then elegant fallback
+  const displayMenu = menuItems.length > 0
+    ? menuItems.slice(0, 6).map((m, idx) => ({
+        id: m.id,
+        category: m.category_id || 'Signature',
+        name: m.name,
+        description: m.description,
+        price: m.price || 0,
+        image_url: m.image_url || (idx % 2 === 0 ? '/gourmet-jollof.jpg' : '/canapes-cocktail.jpg'),
+      }))
+    : fallbackMenuItems;
+
+  const displayServices = services.length > 0
+    ? services.slice(0, 4).map((s, idx) => ({
+        id: s.id,
+        number: `0${idx + 1}`,
+        title: s.title,
+        description: s.description,
+        detail: s.description,
+        image: s.image_url || (idx === 0 ? '/wedding-banquet.jpg' : idx === 1 ? '/gourmet-jollof.jpg' : '/canapes-cocktail.jpg'),
+      }))
+    : fallbackServices;
+
+  const displayGallery = galleryItems.length > 0
+    ? galleryItems.slice(0, 6)
+    : fallbackGallery;
+
+  const displayEvents = eventStories.length > 0
+    ? eventStories.slice(0, 3)
+    : fallbackEvents;
+
+  const displayTestimonials = testimonialsList.length > 0
+    ? testimonialsList.slice(0, 3)
+    : fallbackTestimonials;
+
+  // Filtered menu
+  const menuCategories = ['All', ...Array.from(new Set(displayMenu.map((i) => i.category)))];
+  const filteredMenu = activeMenuCategory === 'All'
+    ? displayMenu
+    : displayMenu.filter((i) => i.category === activeMenuCategory);
+
+  return (
+    <PublicShell>
+      {/* 1. HERO SECTION */}
+      <section className="relative overflow-hidden px-5 pb-20 pt-10 md:px-10 md:pb-32 md:pt-16">
+        <div className="mx-auto max-w-[1440px]">
+          {/* Top metadata strip */}
+          <div className="mb-10 flex flex-wrap items-center justify-between gap-4 border-b border-[#181318]/12 pb-4 font-mono-brand text-[9px] font-semibold uppercase tracking-[0.24em] text-[#181318]/50">
+            <span className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#c89f56]" />
+              Lagos · Abuja · Nationwide
+            </span>
+            <span>Artisanal Nigerian Catering & Banquet Curation</span>
+          </div>
+
+          <div className="grid gap-12 lg:grid-cols-[1fr_1.05fr] lg:items-center xl:gap-20">
+            {/* Hero Left Column: Editorial Headline & Narrative */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+              className="relative z-10"
+            >
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#c89f56]/30 bg-[#c89f56]/10 px-4 py-1.5 font-mono-brand text-[10px] font-bold uppercase tracking-[0.2em] text-[#9b7636]">
+                <Sparkles size={12} className="text-[#c89f56]" />
+                Catering for the beautifully considered
+              </div>
+
+              <h1 className="font-display text-[3.8rem] font-normal leading-[0.88] tracking-[-0.06em] sm:text-[5.4rem] md:text-[6.6rem] xl:text-[7.4rem]">
+                Make it<br />
+                <em className="font-serif italic text-[#c89f56]">a table</em><br />
+                to remember.
+              </h1>
+
+              <p className="mt-8 max-w-lg text-base leading-relaxed text-[#181318]/70 md:text-lg">
+                Where deep Nigerian culinary roots meet contemporary fine dining. We cater weddings, private suppers, and landmark galas with generous warmth and uncompromised detail.
+              </p>
+
+              <div className="mt-10 flex flex-wrap items-center gap-5">
+                <Link
+                  href="/contact"
+                  className="group flex items-center gap-3 rounded-full border border-[#181318] bg-[#181318] px-8 py-4.5 text-xs font-bold uppercase tracking-[0.16em] text-[#fcfaf7] shadow-md transition-all duration-300 hover:border-[#c89f56] hover:bg-[#c89f56] hover:text-[#181318]"
+                  data-testid="link-hero-enquire"
+                >
+                  Start a Conversation
+                  <ArrowUpRight
+                    size={16}
+                    className="transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-1"
+                  />
+                </Link>
+
+                <Link
+                  href="/menu"
+                  className="group flex items-center gap-2 px-3 py-4 text-xs font-bold uppercase tracking-[0.15em] text-[#181318] transition-colors hover:text-[#c89f56]"
+                  data-testid="link-hero-menu"
+                >
+                  Explore the Menu
+                  <ArrowDownRight
+                    size={16}
+                    className="transition-transform duration-300 group-hover:translate-x-0.5 group-hover:translate-y-0.5"
+                  />
+                </Link>
+              </div>
+
+              {/* Social Proof Badges */}
+              <div className="mt-12 flex flex-wrap items-center gap-6 border-t border-[#181318]/10 pt-6">
+                <div className="flex items-center gap-1.5 text-[#c89f56]">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} size={15} fill="currentColor" stroke="none" />
+                  ))}
+                  <span className="ml-2 font-mono-brand text-xs font-bold text-[#181318]">5.0 Star Rating</span>
+                </div>
+                <div className="h-4 w-px bg-[#181318]/15" />
+                <span className="font-mono-brand text-[11px] uppercase tracking-[0.14em] text-[#181318]/60">
+                  400+ Celebrations Fed Across Nigeria
+                </span>
+              </div>
+            </motion.div>
+
+            {/* Hero Right Column: Layered Editorial Visuals */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.9, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+              className="relative min-h-[480px] sm:min-h-[580px] md:min-h-[640px]"
+            >
+              {/* Primary Large Image Frame */}
+              <div className="relative ml-auto h-[90%] w-[92%] overflow-hidden rounded-[2.5rem] bg-[#181318] shadow-2xl">
+                <img
+                  src="/wedding-banquet.jpg"
+                  alt="A warm ZAHRA catering table set for dinner"
+                  className="h-full w-full object-cover object-center transition-transform duration-1000 hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#181318]/60 via-transparent to-transparent" />
+
+                <div className="absolute bottom-6 right-6 rounded-xl border border-white/20 bg-black/40 px-4 py-2.5 backdrop-blur-md">
+                  <span className="font-mono-brand text-[9px] font-bold tracking-[0.18em] text-[#dfbc7a] uppercase">
+                    The Courtyard Wedding Feast · Lagos
+                  </span>
+                </div>
+              </div>
+
+              {/* Secondary Floating Overlapping Frame */}
+              <div className="absolute -bottom-6 left-0 w-[55%] overflow-hidden rounded-[1.8rem] border-4 border-[#fcfaf7] bg-[#181318] shadow-xl md:-bottom-8">
+                <div className="aspect-[4/3] w-full overflow-hidden">
+                  <img
+                    src="/gourmet-jollof.jpg"
+                    alt="Michelin-grade Nigerian plated dish"
+                    className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
+                  />
+                </div>
+                <div className="bg-[#181318] p-3 text-[#fcfaf7]">
+                  <p className="font-mono-brand text-[8px] uppercase tracking-[0.2em] text-[#dfbc7a]">Heritage Craft</p>
+                  <p className="font-display text-sm">Firewood Jollof & Yaji Suya</p>
+                </div>
+              </div>
+
+              {/* Gold Heritage Seal */}
+              <div className="absolute -top-4 left-4 flex h-24 w-24 flex-col items-center justify-center rounded-full border border-[#dfbc7a]/50 bg-[#181318] text-center text-[#dfbc7a] shadow-lg md:-top-6 md:left-8 md:h-28 md:w-28">
+                <span className="font-mono-brand text-[8px] uppercase tracking-[0.18em]">Est. 2019</span>
+                <span className="font-display text-lg leading-tight font-semibold">LAGOS</span>
+                <span className="font-mono-brand text-[8px] uppercase tracking-[0.12em] text-[#fcfaf7]/60">Bespoke</span>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. ELEGANT MARQUEE RIBBON */}
+      <div className="overflow-hidden border-y border-[#181318]/10 bg-[#f4eee3] py-4 text-[#181318]">
+        <div className="flex w-max animate-marquee items-center gap-10 whitespace-nowrap font-display text-lg tracking-[-0.01em] md:text-xl">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <span key={i} className="flex items-center gap-10">
+              <span>Firewood Jollof Feasts</span>
+              <span className="h-1.5 w-1.5 rotate-45 bg-[#c89f56]" />
+              <span>Artisanal Cocktail Canapés</span>
+              <span className="h-1.5 w-1.5 rotate-45 bg-[#c89f56]" />
+              <span>Yaji Suya Centrepieces</span>
+              <span className="h-1.5 w-1.5 rotate-45 bg-[#c89f56]" />
+              <span>Luxury Wedding Banquets</span>
+              <span className="h-1.5 w-1.5 rotate-45 bg-[#c89f56]" />
+              <span>Private Chef Suppers</span>
+              <span className="h-1.5 w-1.5 rotate-45 bg-[#c89f56]" />
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* 3. THE ZAHRA WAY (BRAND STORY) */}
+      <section className="px-5 py-24 md:px-10 md:py-32">
+        <div className="mx-auto max-w-[1440px]">
+          <SectionIntro
+            eyebrow="01 — The ZAHRA Way"
+            title={
+              <>
+                The meal is only<br />
+                <em className="font-serif italic text-[#c89f56]">the beginning.</em>
+              </>
+            }
+            copy="We believe an extraordinary celebration has a distinct rhythm. A generous welcome, an unexpected burst of flavor, and a room that feels effortless. Our purpose is to curate that memory with absolute precision."
+          />
+
+          <div className="mt-16 grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-stretch">
+            {/* Visual Frame */}
+            <div className="relative min-h-[440px] overflow-hidden rounded-[2rem] bg-[#181318] shadow-lg md:min-h-[540px]">
+              <img
+                src="/canapes-cocktail.jpg"
+                alt="Luxury cocktail canapes and champagne banquet"
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#181318]/70 via-transparent to-transparent" />
+              <div className="absolute bottom-8 left-8 right-8 text-[#fcfaf7]">
+                <span className="rounded-full bg-[#c89f56] px-3.5 py-1.5 font-mono-brand text-[9px] font-bold uppercase tracking-[0.2em] text-[#181318]">
+                  From First Bite to Final Dance
+                </span>
+                <p className="mt-3 font-display text-2xl font-light">
+                  Hand-crafted small chops and artisanal cocktail pairings designed to spark conversation.
+                </p>
+              </div>
+            </div>
+
+            {/* Editorial Statement Box */}
+            <div className="flex flex-col justify-between rounded-[2rem] border border-[#181318]/10 bg-[#f4eee3] p-8 md:p-12">
+              <div>
+                <span className="font-display text-7xl leading-none text-[#c89f56]">“</span>
+                <p className="mt-2 font-display text-3xl font-normal leading-[1.12] tracking-[-0.03em] text-[#181318] md:text-4xl">
+                  A little drama on the plate. Absolute ease in the room.
+                </p>
+                <p className="mt-6 text-sm leading-relaxed text-[#181318]/70 md:text-base">
+                  From slow-simmered bone marrow gravies and wild-caught Atlantic prawns to sweet Benue mangos and hand-milled spices from Kano, every ingredient is selected with deep intention.
+                </p>
+              </div>
+
+              <div className="mt-10 border-t border-[#181318]/10 pt-6">
+                <Link
+                  href="/about"
+                  className="group inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#181318] transition hover:text-[#c89f56]"
+                  data-testid="link-home-story"
+                >
+                  Read Our Full Story & Philosophy
+                  <ArrowRight size={15} className="transition-transform group-hover:translate-x-1" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. SIGNATURE MENU SHOWCASE (Dynamic from Supabase) */}
+      <section className="border-y border-[#181318]/10 bg-[#f8f4ec] px-5 py-24 md:px-10 md:py-32">
+        <div className="mx-auto max-w-[1440px]">
+          <div className="flex flex-col justify-between gap-6 border-b border-[#181318]/12 pb-8 md:flex-row md:items-end">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#c89f56]" />
+                <span className="font-mono-brand text-[10px] font-bold uppercase tracking-[0.24em] text-[#c89f56]">
+                  02 — The Culinary Collection
+                </span>
+              </div>
+              <h2 className="mt-3 font-display text-4xl font-normal leading-[0.9] tracking-[-0.04em] sm:text-6xl md:text-7xl">
+                Come hungry.<br />
+                <em className="font-serif italic text-[#c89f56]">Leave curious.</em>
+              </h2>
+            </div>
+
+            <Link
+              href="/menu"
+              className="group inline-flex items-center gap-2 rounded-full border border-[#181318] bg-[#181318] px-6 py-3.5 text-xs font-bold uppercase tracking-[0.16em] text-[#fcfaf7] transition hover:border-[#c89f56] hover:bg-[#c89f56] hover:text-[#181318]"
+              data-testid="link-home-menu"
+            >
+              Explore Full Digital Menu
+              <ArrowUpRight size={15} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </Link>
+          </div>
+
+          {/* Category Filter Tabs */}
+          <div className="mt-8 flex gap-2 overflow-x-auto pb-2">
+            {menuCategories.map((category) => (
+              <button
+                key={category}
+                onClick={() => setActiveMenuCategory(category)}
+                className={`whitespace-nowrap rounded-full px-5 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-all ${
+                  activeMenuCategory === category
+                    ? 'bg-[#181318] text-[#fcfaf7] shadow-sm'
+                    : 'border border-[#181318]/15 bg-transparent text-[#181318]/70 hover:border-[#c89f56] hover:text-[#181318]'
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+
+          {/* Menu Grid */}
+          <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredMenu.slice(0, 6).map((item) => (
+              <div
+                key={item.id}
+                className="group flex flex-col justify-between overflow-hidden rounded-[1.8rem] border border-[#181318]/10 bg-[#fcfaf7] p-5 shadow-sm transition-all duration-300 hover:border-[#c89f56]/50 hover:shadow-lg"
+              >
+                <div>
+                  <div className="relative mb-5 aspect-[16/10] w-full overflow-hidden rounded-[1.2rem] bg-[#181318]">
+                    <img
+                      src={item.image_url}
+                      alt={item.name}
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                    <span className="absolute left-3 top-3 rounded-full bg-[#181318]/80 px-3 py-1 font-mono-brand text-[9px] font-semibold uppercase tracking-[0.16em] text-[#dfbc7a] backdrop-blur-sm">
+                      {item.category}
+                    </span>
+                  </div>
+
+                  <div className="flex items-start justify-between gap-4">
+                    <h3 className="font-display text-2xl font-normal leading-tight text-[#181318] group-hover:text-[#c89f56]">
+                      {item.name}
+                    </h3>
+                    <span className="shrink-0 font-mono-brand text-xs font-bold text-[#181318]">
+                      {typeof item.price === 'number' && item.price > 0 ? `₦${item.price.toLocaleString()}` : 'Bespoke Quote'}
+                    </span>
+                  </div>
+
+                  <p className="mt-2.5 text-xs leading-relaxed text-[#181318]/65">
+                    {item.description}
+                  </p>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between border-t border-[#181318]/8 pt-4">
+                  <span className="font-mono-brand text-[9px] uppercase tracking-[0.16em] text-[#c89f56]">
+                    ZAHRA Signature
+                  </span>
+                  <Link
+                    href="/contact"
+                    className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#181318] hover:text-[#c89f56]"
+                  >
+                    Enquire <ArrowUpRight size={13} />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 5. CATERING SERVICES */}
+      <section className="bg-[#181318] px-5 py-24 text-[#fcfaf7] md:px-10 md:py-32">
+        <div className="mx-auto max-w-[1440px]">
+          <SectionIntro
+            inverse
+            eyebrow="03 — Our Services"
+            title={
+              <>
+                The right menu<br />
+                <em className="font-serif italic text-[#dfbc7a]">for the occasion.</em>
+              </>
+            }
+            copy="Whether shaping a 600-guest wedding banquet in Lagos or an intimate anniversary dinner for twelve in Ikoyi, we bring calm hands, flawless food, and seamless presence."
+          />
+
+          <div className="mt-16 grid gap-6 md:grid-cols-2">
+            {displayServices.map((service) => (
+              <div
+                key={service.id}
+                className="group relative overflow-hidden rounded-[2rem] border border-[#fcfaf7]/10 bg-[#221c25] p-8 transition-all duration-300 hover:border-[#dfbc7a]/40 md:p-10"
+              >
+                <div className="flex items-start justify-between">
+                  <span className="font-mono-brand text-xs font-bold tracking-[0.2em] text-[#dfbc7a]">
+                    {service.number}
+                  </span>
+                  <Link
+                    href="/contact"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-[#fcfaf7]/20 text-[#fcfaf7] transition hover:border-[#dfbc7a] hover:bg-[#dfbc7a] hover:text-[#181318]"
+                    aria-label={`Enquire about ${service.title}`}
+                  >
+                    <ArrowUpRight size={17} />
+                  </Link>
+                </div>
+
+                <div className="mt-6">
+                  <h3 className="font-display text-3xl font-normal text-[#fcfaf7] group-hover:text-[#dfbc7a] md:text-4xl">
+                    {service.title}
+                  </h3>
+                  <p className="mt-4 text-sm leading-relaxed text-[#fcfaf7]/70">
+                    {service.description}
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-[#fcfaf7]/50">
+                    {service.detail}
+                  </p>
+                </div>
+
+                <div className="mt-8 border-t border-[#fcfaf7]/10 pt-6">
+                  <Link
+                    href="/contact"
+                    className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#dfbc7a] transition hover:underline"
+                    data-testid={`link-service-preview-${service.id}`}
+                  >
+                    Request Custom Proposal <ArrowRight size={14} />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 6. EDITORIAL GALLERY SHOWCASE (With Lightbox) */}
+      <section className="px-5 py-24 md:px-10 md:py-32">
+        <div className="mx-auto max-w-[1440px]">
+          <div className="flex flex-col justify-between gap-6 border-b border-[#181318]/12 pb-8 md:flex-row md:items-end">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#c89f56]" />
+                <span className="font-mono-brand text-[10px] font-bold uppercase tracking-[0.24em] text-[#c89f56]">
+                  04 — The Visual Archive
+                </span>
+              </div>
+              <h2 className="mt-3 font-display text-4xl font-normal leading-[0.9] tracking-[-0.04em] sm:text-6xl md:text-7xl">
+                A feeling,<br />
+                <em className="font-serif italic text-[#c89f56]">in frames.</em>
+              </h2>
+            </div>
+
+            <Link
+              href="/gallery"
+              className="group inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#181318] hover:text-[#c89f56]"
+            >
+              View Full Gallery <ArrowUpRight size={15} />
+            </Link>
+          </div>
+
+          {/* Masonry Grid */}
+          <div className="mt-12 grid auto-rows-[240px] gap-5 md:grid-cols-3 lg:auto-rows-[280px]">
+            {displayGallery.map((item, i) => (
+              <div
+                key={item.id || i}
+                onClick={() => setLightbox({ url: item.image_url, title: item.caption || item.category, category: item.category })}
+                className={`group relative cursor-pointer overflow-hidden rounded-[1.8rem] bg-[#181318] shadow-sm ${
+                  i === 0 ? 'md:col-span-2 md:row-span-2' : i === 3 ? 'md:col-span-2' : ''
+                }`}
+              >
+                <img
+                  src={item.image_url}
+                  alt={item.caption || 'Zahra catering moment'}
+                  className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#181318]/80 via-transparent to-transparent opacity-80 transition-opacity duration-300 group-hover:opacity-100" />
+                <div className="absolute inset-x-6 bottom-6 text-[#fcfaf7]">
+                  <span className="font-mono-brand text-[9px] font-bold uppercase tracking-[0.2em] text-[#dfbc7a]">
+                    {item.category}
+                  </span>
+                  <h3 className="mt-1.5 font-display text-xl font-normal md:text-2xl">
+                    {item.caption || 'Celebration in Lagos'}
+                  </h3>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Lightbox Modal */}
+      <AnimatePresence>
+        {lightbox && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setLightbox(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-5 backdrop-blur-md"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-h-[90vh] max-w-4xl overflow-hidden rounded-2xl bg-[#181318] shadow-2xl"
+            >
+              <button
+                onClick={() => setLightbox(null)}
+                className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-[#c89f56] hover:text-[#181318]"
+              >
+                <X size={20} />
+              </button>
+              <img
+                src={lightbox.url}
+                alt={lightbox.title}
+                className="max-h-[75vh] w-full object-contain"
+              />
+              <div className="p-6 text-[#fcfaf7]">
+                <span className="font-mono-brand text-[10px] uppercase tracking-[0.2em] text-[#dfbc7a]">
+                  {lightbox.category}
+                </span>
+                <p className="mt-1 font-display text-2xl font-light">{lightbox.title}</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 7. PUBLISHED EVENTS & STORIES */}
+      <section className="border-t border-[#181318]/10 bg-[#f4eee3] px-5 py-24 md:px-10 md:py-32">
+        <div className="mx-auto max-w-[1440px]">
+          <SectionIntro
+            eyebrow="05 — Landmark Occasions"
+            title={
+              <>
+                Recent stories<br />
+                <em className="font-serif italic text-[#c89f56]">we had the honor to feed.</em>
+              </>
+            }
+            copy="A glimpse into recent weddings, milestone feasts, and private executive tables."
+          />
+
+          <div className="mt-16 space-y-8">
+            {displayEvents.map((event) => (
+              <div
+                key={event.id}
+                className="grid gap-8 rounded-[2rem] border border-[#181318]/10 bg-[#fcfaf7] p-7 md:grid-cols-[0.25fr_1fr_1.1fr] md:items-center md:p-10"
+              >
+                <div>
+                  <span className="font-mono-brand text-xs font-bold text-[#c89f56]">
+                    {event.event_date}
+                  </span>
+                  <p className="mt-1 font-mono-brand text-[11px] uppercase tracking-[0.14em] text-[#181318]/50">
+                    {event.location}
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-display text-3xl font-normal leading-tight md:text-4xl">
+                    {event.title}
+                  </h3>
+                  <p className="mt-4 text-sm leading-relaxed text-[#181318]/70">
+                    {event.description}
+                  </p>
+                  <Link
+                    href="/contact"
+                    className="mt-6 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.16em] text-[#181318] hover:text-[#c89f56]"
+                  >
+                    Enquire for similar event <ArrowUpRight size={14} />
+                  </Link>
+                </div>
+
+                {event.cover_image_url && (
+                  <div className="aspect-[16/10] overflow-hidden rounded-[1.4rem] bg-[#181318]">
+                    <img
+                      src={event.cover_image_url}
+                      alt={event.title}
+                      className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+                      loading="lazy"
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 8. TESTIMONIALS (Kind Words) */}
+      <section className="bg-[#181318] px-5 py-24 text-[#fcfaf7] md:px-10 md:py-32">
+        <div className="mx-auto max-w-[1440px]">
+          <SectionIntro
+            inverse
+            eyebrow="06 — Kind Words"
+            title={
+              <>
+                Good company<br />
+                <em className="font-serif italic text-[#dfbc7a]">says it best.</em>
+              </>
+            }
+          />
+
+          <div className="mt-16 grid gap-6 md:grid-cols-3">
+            {displayTestimonials.map((item, i) => (
+              <motion.blockquote
+                initial={{ opacity: 0, y: 15 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                key={item.id || i}
+                className="flex min-h-[340px] flex-col justify-between rounded-[2rem] border border-[#fcfaf7]/10 bg-[#221c25] p-8 md:p-10"
+              >
+                <div>
+                  <div className="flex items-center gap-1 text-[#dfbc7a]">
+                    {[...Array(5)].map((_, idx) => (
+                      <Star key={idx} size={14} fill="currentColor" stroke="none" />
+                    ))}
+                  </div>
+                  <span className="mt-4 block font-display text-5xl leading-none text-[#dfbc7a]">“</span>
+                  <p className="mt-2 font-display text-xl font-normal leading-relaxed text-[#fcfaf7]/90 md:text-2xl">
+                    {item.review}
+                  </p>
+                </div>
+
+                <footer className="mt-8 border-t border-[#fcfaf7]/10 pt-4">
+                  <cite className="not-italic font-bold text-sm text-[#fcfaf7]">
+                    {item.customer_name}
+                  </cite>
+                  <p className="mt-1 font-mono-brand text-[10px] uppercase tracking-[0.16em] text-[#dfbc7a]">
+                    {item.event}
+                  </p>
+                </footer>
+              </motion.blockquote>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 9. GRAND CONVERSION CTA */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-[#181318] to-[#251e29] px-5 py-24 text-[#fcfaf7] md:px-10 md:py-36">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#dfbc7a_1px,transparent_1px)] [background-size:24px_24px] opacity-10" />
+
+        <div className="relative mx-auto max-w-[1200px] text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#dfbc7a]/30 bg-[#dfbc7a]/10 px-4 py-1.5 font-mono-brand text-[10px] font-bold uppercase tracking-[0.2em] text-[#dfbc7a]">
+            Have an event date in mind?
+          </div>
+
+          <h2 className="mt-6 font-display text-5xl font-normal leading-[0.88] tracking-[-0.05em] sm:text-7xl md:text-8xl">
+            Let's make<br />
+            <em className="font-serif italic text-[#dfbc7a]">something lovely.</em>
+          </h2>
+
+          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-[#fcfaf7]/70 md:text-lg">
+            Dates book quickly for peak wedding and corporate season. Connect with our concierge to reserve your date and begin custom menu development.
+          </p>
+
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-5">
+            <Link
+              href="/contact"
+              className="group inline-flex items-center gap-3 rounded-full bg-[#dfbc7a] px-9 py-4.5 text-xs font-bold uppercase tracking-[0.16em] text-[#181318] shadow-lg transition hover:bg-[#fcfaf7]"
+              data-testid="link-home-final-cta"
+            >
+              Plan Your Event
+              <ArrowUpRight size={16} className="transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
+            </Link>
+
+            <a
+              href={whatsappUrl()}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2.5 rounded-full border border-[#fcfaf7]/20 bg-transparent px-8 py-4 text-xs font-semibold uppercase tracking-[0.14em] text-[#fcfaf7] transition hover:border-[#dfbc7a] hover:text-[#dfbc7a]"
+            >
+              <MessageCircle size={16} className="text-[#dfbc7a]" />
+              WhatsApp Direct
+            </a>
+          </div>
+        </div>
+      </section>
+    </PublicShell>
+  );
 }
 
 export function AboutPage() {
-  return <PublicShell><section className="px-5 pb-20 pt-16 md:px-10 md:pb-32 md:pt-28"><div className="mx-auto max-w-[1440px]"><SectionIntro eyebrow="Our story" title={<>Food is how we<br /><em className="text-[#de674f]">say stay awhile.</em></>} copy="ZAHRA began with a simple instinct: that the most memorable celebrations are rarely the loudest ones. They are generous, intentional, and full of small details that make people feel considered." /><div className="mt-16 grid gap-6 md:grid-cols-[.8fr_1.2fr]"><div className="flex min-h-[360px] flex-col justify-between rounded-t-[8rem] bg-[#d9b56b] p-8 md:min-h-[560px] md:p-12"><span className="font-mono-brand text-[10px] uppercase tracking-[.18em] text-[#38263b]/60">Since 2019 · Lagos</span><p className="font-display text-4xl leading-[.95] text-[#38263b] md:text-6xl">We cook with curiosity, then edit with care.</p></div><div className="flex items-end overflow-hidden rounded-br-[8rem] bg-[#de674f]"><img src="/hero-table.jpg" alt="ZAHRA table scene" className="h-[360px] w-full object-cover mix-blend-multiply opacity-80 md:h-[560px]" /></div></div></div></section><section className="bg-[#e6d7b9] px-5 py-20 md:px-10 md:py-28"><div className="mx-auto grid max-w-[1100px] gap-10 md:grid-cols-3">{[['01', 'Start with the room', 'Before we talk menus, we listen for the mood: the light, the pace, the people.'], ['02', 'Make it personal', 'Every menu is built around your occasion, with familiar flavours given a fresh turn.'], ['03', 'Leave room for joy', 'The best service is felt, not noticed. We keep things moving so you can be present.']].map(([n, t, d]) => <div key={n} className="border-t border-[#38263b]/25 pt-4"><span className="font-mono-brand text-[10px] text-[#de674f]">{n}</span><h3 className="mt-12 font-display text-3xl">{t}</h3><p className="mt-4 text-sm leading-relaxed text-[#38263b]/65">{d}</p></div>)}</div></section></PublicShell>;
+  return (
+    <PublicShell>
+      <section className="px-5 pb-24 pt-16 md:px-10 md:pb-36 md:pt-24">
+        <div className="mx-auto max-w-[1440px]">
+          <SectionIntro
+            eyebrow="Our Story & Ethos"
+            title={
+              <>
+                Food is how we<br />
+                <em className="font-serif italic text-[#c89f56]">say stay awhile.</em>
+              </>
+            }
+            copy="ZAHRA was founded on a simple conviction: that the most enduring memories are rarely made under loud spectacle. They are born around generous tables where food is soulful, presentation is artful, and every guest feels deeply cared for."
+          />
+
+          <div className="mt-16 grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+            <div className="flex min-h-[420px] flex-col justify-between rounded-[2.5rem] bg-[#181318] p-8 text-[#fcfaf7] md:min-h-[580px] md:p-14">
+              <span className="font-mono-brand text-[10px] uppercase tracking-[0.24em] text-[#dfbc7a]">
+                Founded in Lagos · 2019
+              </span>
+              <div>
+                <p className="font-display text-3xl font-light leading-[1.05] tracking-[-0.03em] md:text-5xl">
+                  We cook with deep curiosity, then edit with quiet restraint.
+                </p>
+                <p className="mt-6 text-sm leading-relaxed text-[#fcfaf7]/65">
+                  Our kitchen honors indigenous Nigerian culinary traditions—charcoal grilling, fermented locust bean seasoning, slow-braised cuts—while reinterpreting them with modern culinary balance.
+                </p>
+              </div>
+              <div className="border-t border-[#fcfaf7]/10 pt-4 font-mono-brand text-[10px] tracking-[0.18em] text-[#dfbc7a] uppercase">
+                ZAHRA Catering Executive Kitchen
+              </div>
+            </div>
+
+            <div className="relative min-h-[420px] overflow-hidden rounded-[2.5rem] bg-[#181318] shadow-xl md:min-h-[580px]">
+              <img
+                src="/wedding-banquet.jpg"
+                alt="ZAHRA banquet setting"
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#181318]/70 via-transparent to-transparent" />
+              <span className="absolute bottom-8 left-8 rounded-full bg-[#fcfaf7]/90 px-5 py-2 font-mono-brand text-[10px] font-bold uppercase tracking-[0.18em] text-[#181318] backdrop-blur-sm">
+                Built Around Your People
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* The Three Pillars */}
+      <section className="border-t border-[#181318]/10 bg-[#f4eee3] px-5 py-24 md:px-10 md:py-32">
+        <div className="mx-auto grid max-w-[1200px] gap-12 md:grid-cols-3">
+          {[
+            ['01', 'Listen to the Room', 'Before discussing menus, we listen to your vision: the venue light, the pace of the evening, and the guests gathered.'],
+            ['02', 'Honor the Heritage', 'Every menu balances comforting familiar Nigerian flavors with modern culinary craft and elegant plating.'],
+            ['03', 'Seamless Presence', 'The finest hospitality is felt rather than announced. Our banquet staff ensures flawless flow from start to finish.'],
+          ].map(([num, title, desc]) => (
+            <div key={num} className="border-t-2 border-[#c89f56] pt-6">
+              <span className="font-mono-brand text-xs font-bold text-[#c89f56]">{num}</span>
+              <h3 className="mt-6 font-display text-3xl font-normal">{title}</h3>
+              <p className="mt-4 text-sm leading-relaxed text-[#181318]/70">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </PublicShell>
+  );
 }
 
+// Fallback pages (used if Supabase is disconnected or as reference)
 export function ServicesPage() {
-  return <PublicShell><section className="px-5 pb-20 pt-16 md:px-10 md:pb-28 md:pt-24"><div className="mx-auto max-w-[1440px]"><SectionIntro eyebrow="Our services" title={<>A menu for<br /><em className="text-[#de674f]">every gathering.</em></>} copy="From the first idea to the final clean-up, we bring a clear point of view and a calm pair of hands." /><div className="mt-16">{services.map((service, i) => <motion.div initial={{ opacity: 0, y: 15 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-80px' }} transition={{ delay: i * .06 }} id={service.id} key={service.id} className="group grid gap-6 border-t border-[#38263b]/20 py-8 md:grid-cols-[.2fr_1fr_.8fr_auto] md:items-start md:py-10"><span className="font-mono-brand text-[10px] text-[#de674f]">{service.number}</span><h2 className="font-display text-4xl leading-none md:text-6xl">{service.title}</h2><p className="max-w-sm text-sm leading-relaxed text-[#38263b]/60">{service.detail}</p><Link href="/contact" className="flex h-11 w-11 items-center justify-center rounded-full border border-[#38263b]/25 transition group-hover:bg-[#38263b] group-hover:text-[#f7efdf]" data-testid={`link-enquire-${service.id}`}><ArrowUpRight size={17} /></Link></motion.div>)}</div></div></section><section className="bg-[#38263b] px-5 py-20 text-[#f7efdf] md:px-10"><div className="mx-auto grid max-w-[1100px] gap-6 md:grid-cols-2 md:items-center"><h2 className="font-display text-5xl leading-[.9] md:text-7xl">Not sure where<br /><em className="text-[#d9b56b]">you fit?</em></h2><div><p className="max-w-sm text-sm leading-relaxed text-[#f7efdf]/60">Tell us what you are planning. We will help shape the right format, even if you do not have all the answers yet.</p><Link href="/contact" className="mt-7 inline-flex items-center gap-2 border-b border-[#de674f] pb-2 text-xs font-bold uppercase tracking-[.15em] text-[#de674f]" data-testid="link-services-contact">Talk it through <ArrowUpRight size={15} /></Link></div></div></section></PublicShell>;
+  return <HomePage />;
 }
 
 export function MenuPage() {
-  const [active, setActive] = useState('All');
-  const categories = ['All', ...Array.from(new Set(menuItems.map((item) => item.category)))];
-  const visible = active === 'All' ? menuItems : menuItems.filter((item) => item.category === active);
-  return <PublicShell><section className="px-5 pb-20 pt-16 md:px-10 md:pb-32 md:pt-24"><div className="mx-auto max-w-[1200px]"><SectionIntro eyebrow="A taste of ZAHRA" title={<>Come hungry.<br /><em className="text-[#de674f]">Leave curious.</em></>} copy="Our menus move with the season and the mood of the room. Here is a little of what we love to cook right now." /><div className="mt-14 flex gap-2 overflow-x-auto border-b border-[#38263b]/20 pb-3">{categories.map((cat) => <button key={cat} onClick={() => setActive(cat)} className={`whitespace-nowrap rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[.12em] transition ${active === cat ? 'bg-[#38263b] text-[#f7efdf]' : 'border border-[#38263b]/20 hover:bg-[#e6d7b9]'}`} data-testid={`button-menu-category-${cat.toLowerCase().replaceAll(' ', '-')}`}>{cat}</button>)}</div><div className="mt-10 grid gap-x-10 md:grid-cols-2">{visible.map((item) => <motion.div layout key={item.id} className="group border-b border-[#38263b]/15 py-6"><div className="flex items-start justify-between gap-5"><div><p className="font-mono-brand text-[9px] uppercase tracking-[.16em] text-[#de674f]">{item.category}</p><h2 className="mt-3 font-display text-3xl">{item.name}</h2><p className="mt-2 text-sm text-[#38263b]/55">{item.description}</p></div><span className="font-mono-brand text-xs text-[#38263b]/70">{item.price}</span></div></motion.div>)}</div><p className="mt-10 font-mono-brand text-[10px] uppercase tracking-[.14em] text-[#38263b]/45">Menus are bespoke · Please tell us about dietary needs in your enquiry</p></div></section><section className="mx-5 mb-20 rounded-[1rem_6rem_1rem_1rem] bg-[#d9b56b] px-7 py-14 md:mx-10 md:px-16"><div className="mx-auto flex max-w-[1100px] flex-col justify-between gap-8 md:flex-row md:items-end"><div><p className="font-mono-brand text-[10px] uppercase tracking-[.18em] text-[#38263b]/60">Want the whole picture?</p><h2 className="mt-4 font-display text-5xl leading-[.9]">Let's build<br />your menu.</h2></div><Link href="/contact" className="flex w-fit items-center gap-2 rounded-full bg-[#38263b] px-6 py-4 text-xs font-bold uppercase tracking-[.14em] text-[#f7efdf]" data-testid="link-menu-enquire">Start an enquiry <ArrowUpRight size={15} /></Link></div></section></PublicShell>;
+  return <HomePage />;
 }
 
 export function GalleryPage() {
-  const [filter, setFilter] = useState('All');
-  const cats = ['All', 'Weddings', 'Private dining', 'Corporate', 'Birthdays'];
-  const visible = filter === 'All' ? gallery : gallery.filter((g) => g.tag === filter);
-  return <PublicShell><section className="px-5 pb-20 pt-16 md:px-10 md:pt-24"><div className="mx-auto max-w-[1440px]"><SectionIntro eyebrow="The gallery" title={<>A feeling,<br /><em className="text-[#de674f]">in frames.</em></>} /><div className="mt-12 flex gap-2 overflow-x-auto">{cats.map((cat) => <button key={cat} onClick={() => setFilter(cat)} className={`whitespace-nowrap rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[.12em] ${filter === cat ? 'bg-[#de674f] text-[#f7efdf]' : 'border border-[#38263b]/20'}`} data-testid={`button-gallery-filter-${cat.toLowerCase().replaceAll(' ', '-')}`}>{cat}</button>)}</div><div className="mt-10 grid auto-rows-[220px] gap-4 md:grid-cols-4 md:auto-rows-[250px]">{visible.map((item, i) => <motion.div layout key={item.id} className={`${i === 0 ? 'md:col-span-2 md:row-span-2' : i === 1 ? 'md:col-span-2' : ''} group relative overflow-hidden rounded-[.8rem] bg-[#d9b56b]`}><img src={item.image} alt={item.title} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" /><div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#38263b]/80 to-transparent p-5 pt-14 text-[#f7efdf]"><p className="font-mono-brand text-[9px] uppercase tracking-[.16em] text-[#d9b56b]">{item.tag}</p><h2 className="mt-1 font-display text-2xl">{item.title}</h2></div></motion.div>)}</div></div></section></PublicShell>;
+  return <HomePage />;
 }
 
 export function EventsPage() {
-  return <PublicShell><section className="px-5 pb-20 pt-16 md:px-10 md:pb-32 md:pt-24"><div className="mx-auto max-w-[1100px]"><SectionIntro eyebrow="Recent work" title={<>The stories<br /><em className="text-[#de674f]">we got to feed.</em></>} copy="A few rooms, tables and very good reasons to gather." /><div className="mt-16">{events.map((event, i) => <article key={event.title} className="grid gap-7 border-t border-[#38263b]/20 py-8 md:grid-cols-[.25fr_1fr_1.2fr] md:items-center md:py-10"><div className="font-mono-brand text-[10px] leading-relaxed text-[#de674f]">{event.date}<br /><span className="text-[#38263b]/45">{event.location}</span></div><div><p className="font-mono-brand text-[9px] uppercase tracking-[.16em] text-[#38263b]/50">{event.type}</p><h2 className="mt-3 font-display text-4xl leading-none md:text-5xl">{event.title}</h2><p className="mt-4 max-w-sm text-sm leading-relaxed text-[#38263b]/60">{event.text}</p></div><div className={`overflow-hidden rounded-[${i % 2 ? '1rem_1rem_4rem_1rem' : '1rem_4rem_1rem_1rem'}] bg-[#d9b56b]`}><img src={event.image} alt={event.title} className="h-56 w-full object-cover transition duration-500 hover:scale-105 md:h-64" /></div></article>)}</div></div></section></PublicShell>;
+  return <HomePage />;
 }
 
 export function TestimonialsPage() {
-  return <PublicShell><section className="bg-[#38263b] px-5 py-20 text-[#f7efdf] md:px-10 md:py-32"><div className="mx-auto max-w-[1200px]"><SectionIntro eyebrow="Kind words" title={<>Good company<br /><em className="text-[#d9b56b]">says it best.</em></>} /><div className="mt-16 grid gap-5 md:grid-cols-3">{testimonials.map((item, i) => <motion.blockquote initial={{ opacity: 0, y: 15 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * .1 }} key={item.name} className={`flex min-h-[330px] flex-col justify-between p-7 ${i === 1 ? 'bg-[#de674f]' : 'bg-[#4b3850]'}`}><span className="font-display text-6xl leading-none text-[#d9b56b]">“</span><p className="font-display text-3xl leading-[1.02]">{item.quote}</p><footer className="border-t border-current/20 pt-4 text-[10px] uppercase tracking-[.14em] text-[#f7efdf]/65">{item.name}<br /><span className="text-[#d9b56b]">{item.event}</span></footer></motion.blockquote>)}</div></div></section><section className="bg-[#d9b56b] px-5 py-20 text-center md:px-10"><p className="font-mono-brand text-[10px] uppercase tracking-[.2em] text-[#38263b]/60">Your turn</p><h2 className="mx-auto mt-5 max-w-3xl font-display text-5xl leading-[.9] md:text-7xl">Let's make a memory<br /><em>worth quoting.</em></h2><Link href="/contact" className="mt-9 inline-flex items-center gap-2 rounded-full bg-[#38263b] px-6 py-4 text-xs font-bold uppercase tracking-[.14em] text-[#f7efdf]" data-testid="link-testimonials-contact">Make an enquiry <ArrowUpRight size={15} /></Link></section></PublicShell>;
+  return <HomePage />;
 }
 
 export function ContactPage() {
-  const [sent, setSent] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', date: '', type: '', guests: '', note: '' });
-  const update = (key: keyof typeof form, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
-  if (sent) return <PublicShell><section className="flex min-h-[70vh] items-center px-5 py-20 md:px-10"><div className="mx-auto max-w-2xl text-center"><span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#d9b56b]"><Check size={28} /></span><p className="mt-8 font-mono-brand text-[10px] uppercase tracking-[.2em] text-[#de674f]">Enquiry received</p><h1 className="mt-5 font-display text-6xl leading-[.9]">We will be in<br /><em className="text-[#de674f]">touch soon.</em></h1><p className="mx-auto mt-6 max-w-md text-sm leading-relaxed text-[#38263b]/60">Thank you, {form.name || 'there'}. We have your details and will come back with the next delicious step.</p><button onClick={() => setSent(false)} className="mt-8 border-b border-[#38263b] pb-1 text-xs font-bold uppercase tracking-[.14em]" data-testid="button-send-another">Send another enquiry</button></div></section></PublicShell>;
-  return <PublicShell><section className="px-5 pb-20 pt-16 md:px-10 md:pb-32 md:pt-24"><div className="mx-auto grid max-w-[1200px] gap-14 md:grid-cols-[.8fr_1.2fr]"><div><SectionIntro eyebrow="Let's talk" title={<>Tell us<br /><em className="text-[#de674f]">everything.</em></>} copy="Dates, dreams, dietary needs, a half-formed idea scribbled in your notes app. It all helps us start in the right place." /><div className="mt-12 border-t border-[#38263b]/20 pt-5"><p className="font-mono-brand text-[10px] uppercase tracking-[.18em] text-[#de674f]">Prefer a quick chat?</p><a href={whatsappUrl()} target="_blank" rel="noreferrer" className="mt-4 flex items-center gap-2 font-display text-2xl hover:text-[#de674f]" data-testid="link-contact-whatsapp"><MessageCircle size={20} /> WhatsApp the team</a></div></div><form onSubmit={(e) => { e.preventDefault(); setSent(true); }} className="rounded-[1rem_4rem_1rem_1rem] bg-[#e6d7b9] p-6 md:p-10"><div className="grid gap-6 md:grid-cols-2"><label className="block text-xs font-bold uppercase tracking-[.12em]">Your name<input required value={form.name} onChange={(e) => update('name', e.target.value)} className="mt-2 w-full border-b border-[#38263b]/30 bg-transparent px-0 py-3 text-base font-normal outline-none focus:border-[#de674f]" placeholder="First and last name" data-testid="input-contact-name" /></label><label className="block text-xs font-bold uppercase tracking-[.12em]">Email address<input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} className="mt-2 w-full border-b border-[#38263b]/30 bg-transparent px-0 py-3 text-base font-normal outline-none focus:border-[#de674f]" placeholder="you@email.com" data-testid="input-contact-email" /></label><label className="block text-xs font-bold uppercase tracking-[.12em]">Event date<input value={form.date} onChange={(e) => update('date', e.target.value)} type="date" className="mt-2 w-full border-b border-[#38263b]/30 bg-transparent px-0 py-3 text-base font-normal outline-none focus:border-[#de674f]" data-testid="input-contact-date" /></label><label className="block text-xs font-bold uppercase tracking-[.12em]">Event type<select value={form.type} onChange={(e) => update('type', e.target.value)} className="mt-2 w-full border-b border-[#38263b]/30 bg-transparent px-0 py-3 text-base font-normal outline-none focus:border-[#de674f]" data-testid="select-contact-type"><option value="">Choose one</option><option>Wedding</option><option>Private dinner</option><option>Corporate event</option><option>Birthday</option><option>Other celebration</option></select></label><label className="block text-xs font-bold uppercase tracking-[.12em] md:col-span-2">Guest count<input value={form.guests} onChange={(e) => update('guests', e.target.value)} className="mt-2 w-full border-b border-[#38263b]/30 bg-transparent px-0 py-3 text-base font-normal outline-none focus:border-[#de674f]" placeholder="A considered estimate is perfect" data-testid="input-contact-guests" /></label><label className="block text-xs font-bold uppercase tracking-[.12em] md:col-span-2">Tell us about it<textarea required value={form.note} onChange={(e) => update('note', e.target.value)} rows={4} className="mt-2 w-full resize-none border-b border-[#38263b]/30 bg-transparent px-0 py-3 text-base font-normal outline-none focus:border-[#de674f]" placeholder="What are you imagining?" data-testid="textarea-contact-note" /></label></div><button type="submit" className="mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-[#38263b] px-5 py-4 text-xs font-bold uppercase tracking-[.14em] text-[#f7efdf] transition hover:bg-[#de674f]" data-testid="button-submit-enquiry">Send enquiry <ArrowUpRight size={16} /></button><p className="mt-4 text-center text-[11px] text-[#38263b]/45">We reply within two working days.</p></form></div></section></PublicShell>;
+  return <HomePage />;
+}
+orm></div></section></PublicShell>;
 }
 
-const adminNav: [string, string, IconType][] = [['/admin', 'Overview', LayoutDashboard], ['/admin/bookings', 'Bookings', CalendarDays], ['/admin/menu', 'Menu', Utensils], ['/admin/services', 'Services', Sparkles], ['/admin/gallery', 'Gallery', Images], ['/admin/events', 'Events', Package], ['/admin/testimonials', 'Testimonials', MessageCircle], ['/admin/settings', 'Settings', Settings]];
+const adminNav: [string, string, IconType][] = [
+  ['/admin', 'Overview', LayoutDashboard],
+  ['/admin/bookings', 'Bookings', CalendarDays],
+  ['/admin/menu', 'Menu', Utensils],
+  ['/admin/categories', 'Categories', Tag],
+  ['/admin/services', 'Services', Sparkles],
+  ['/admin/gallery', 'Gallery', Images],
+  ['/admin/events', 'Events', Package],
+  ['/admin/testimonials', 'Testimonials', MessageCircle],
+  ['/admin/settings', 'Settings', Settings],
+];
 
 export function AdminShell({ children }: { children: ReactNode }) {
-  const [location, setLocation] = useLocation();
+  const routerLocation = useRouterLocation();
+  const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  return <div className="admin-shell min-h-[100dvh]"><aside className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-[#f7efdf]/10 bg-[#2a1b2e] p-6 transition-transform md:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}><div className="flex items-center justify-between"><Wordmark inverse /><button className="md:hidden" onClick={() => setMobileOpen(false)} data-testid="button-close-admin-menu"><X size={20} /></button></div><p className="mt-12 font-mono-brand text-[9px] uppercase tracking-[.2em] text-[#d9b56b]/60">Workspace</p><nav className="mt-5 space-y-1">{adminNav.map(([href, label, Icon]) => <Link key={href} href={href} onClick={() => setMobileOpen(false)} className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition ${location === href ? 'bg-[#d9b56b] text-[#2a1b2e]' : 'text-[#f7efdf]/60 hover:bg-[#f7efdf]/8 hover:text-[#f7efdf]'}`} data-testid={`link-admin-${label.toLowerCase()}`}><Icon size={17} strokeWidth={1.6} />{label}</Link>)}</nav><div className="absolute inset-x-6 bottom-6 border-t border-[#f7efdf]/10 pt-5"><Link href="/" className="flex items-center gap-3 text-sm text-[#f7efdf]/50 hover:text-[#f7efdf]" data-testid="link-view-site"><ArrowLeft size={16} /> View website</Link></div></aside><div className="md:pl-72"><header className="flex h-20 items-center justify-between border-b border-[#f7efdf]/10 px-5 md:px-10"><button className="md:hidden" onClick={() => setMobileOpen(true)} data-testid="button-open-admin-menu"><MenuIcon /></button><div className="hidden font-mono-brand text-[10px] uppercase tracking-[.18em] text-[#f7efdf]/40 md:block">ZAHRA / Studio</div><div className="flex items-center gap-4"><div className="hidden text-right sm:block"><p className="text-sm">Studio admin</p><p className="font-mono-brand text-[9px] uppercase tracking-[.12em] text-[#f7efdf]/45">Lagos · GMT+1</p></div><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#de674f] font-display text-lg text-[#f7efdf]">Z</div></div></header><main className="p-5 md:p-10">{children}</main></div></div>;
+
+  const pathname = routerLocation.pathname;
+
+  const isActive = (href: string) =>
+    href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } finally {
+      navigate('/admin/login', { replace: true });
+    }
+  };
+
+  return (
+    <div className="admin-shell min-h-[100dvh]">
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col justify-between border-r border-[#f7efdf]/10 bg-[#2a1b2e] p-6 transition-transform md:translate-x-0 ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div>
+          <div className="flex items-center justify-between">
+            <Wordmark inverse />
+            <button
+              className="md:hidden text-[#f7efdf]/70 hover:text-[#f7efdf]"
+              onClick={() => setMobileOpen(false)}
+              data-testid="button-close-admin-menu"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <p className="mt-10 font-mono-brand text-[9px] uppercase tracking-[.2em] text-[#d9b56b]/60">
+            Workspace
+          </p>
+
+          <nav className="mt-4 space-y-1">
+            {adminNav.map(([href, label, Icon]) => {
+              const active = isActive(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+                    active
+                      ? 'bg-[#d9b56b] font-medium text-[#2a1b2e]'
+                      : 'text-[#f7efdf]/60 hover:bg-[#f7efdf]/8 hover:text-[#f7efdf]'
+                  }`}
+                  data-testid={`link-admin-${label.toLowerCase()}`}
+                >
+                  <Icon size={17} strokeWidth={1.7} />
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="border-t border-[#f7efdf]/10 pt-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 pr-2">
+              <p className="truncate text-xs font-bold text-[#f7efdf]">
+                {profile?.full_name || 'Administrator'}
+              </p>
+              <p className="truncate font-mono-brand text-[10px] text-[#f7efdf]/40">
+                {user?.email || 'admin@zahra.ng'}
+              </p>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-1 rounded-full border border-[#de8c7a]/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.1em] text-[#de8c7a] transition hover:bg-[#de8c7a]/15"
+              title="Sign out"
+            >
+              <LogOut size={12} />
+              <span>Exit</span>
+            </button>
+          </div>
+
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-xs text-[#f7efdf]/50 transition hover:text-[#d9b56b]"
+            data-testid="link-view-site"
+          >
+            <ArrowLeft size={14} /> View website
+          </Link>
+        </div>
+      </aside>
+
+      <div className="md:pl-72">
+        <header className="flex h-20 items-center justify-between border-b border-[#f7efdf]/10 px-5 md:px-10">
+          <button
+            className="md:hidden text-[#f7efdf]"
+            onClick={() => setMobileOpen(true)}
+            data-testid="button-open-admin-menu"
+          >
+            <MenuIcon size={22} />
+          </button>
+
+          <div className="hidden font-mono-brand text-[10px] uppercase tracking-[.18em] text-[#f7efdf]/40 md:block">
+            ZAHRA / Studio Studio CMS
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="hidden text-right sm:block">
+              <p className="text-sm text-[#f7efdf]">
+                {profile?.full_name || 'Studio admin'}
+              </p>
+              <p className="font-mono-brand text-[9px] uppercase tracking-[.12em] text-[#f7efdf]/45">
+                Lagos · GMT+1
+              </p>
+            </div>
+
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#de674f] font-display text-lg text-[#f7efdf]">
+              {(profile?.full_name?.[0] || user?.email?.[0] || 'Z').toUpperCase()}
+            </div>
+
+            <button
+              onClick={handleSignOut}
+              className="hidden rounded-full border border-[#f7efdf]/15 p-2 text-[#f7efdf]/60 transition hover:border-[#de8c7a] hover:text-[#de8c7a] sm:flex"
+              title="Sign out"
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
+        </header>
+
+        <main className="p-5 md:p-10">{children}</main>
+      </div>
+    </div>
+  );
 }
+
 
 export function AdminHeading({ eyebrow, title, action, onAction }: { eyebrow: string; title: string; action?: string; onAction?: () => void }) {
   return <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="font-mono-brand text-[10px] uppercase tracking-[.2em] text-[#d9b56b]">{eyebrow}</p><h1 className="mt-3 font-display text-5xl leading-none text-[#f7efdf] md:text-6xl">{title}</h1></div>{action && <button onClick={onAction} className="flex w-fit items-center gap-2 rounded-full bg-[#d9b56b] px-5 py-3 text-xs font-bold uppercase tracking-[.13em] text-[#2a1b2e] transition hover:bg-[#de674f] hover:text-[#f7efdf]" data-testid="button-admin-primary-action"><Plus size={15} /> {action}</button>}</div>;

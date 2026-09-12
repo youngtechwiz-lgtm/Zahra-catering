@@ -7,6 +7,8 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
+let clientInstance: SupabaseClient | null = null;
+
 export function getSupabaseClient(): SupabaseClient {
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error(
@@ -14,13 +16,17 @@ export function getSupabaseClient(): SupabaseClient {
     );
   }
 
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-  });
+  if (!clientInstance) {
+    clientInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+  }
+
+  return clientInstance;
 }
 
 export const supabase = isSupabaseConfigured

@@ -1,15 +1,26 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { signInAdmin } from '@/services/auth';
+import { useAuth } from '@/context/AuthContext';
 
 export function AdminLoginLivePage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { signIn, isAdmin, loading } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // If already logged in as admin, redirect to target or /admin
+  useEffect(() => {
+    if (!loading && isAdmin) {
+      const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || '/admin';
+      navigate(from, { replace: true });
+    }
+  }, [isAdmin, loading, navigate, location]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -18,13 +29,14 @@ export function AdminLoginLivePage() {
     setError('');
 
     try {
-      await signInAdmin(email.trim(), password);
-      navigate('/admin', { replace: true });
+      await signIn(email.trim(), password);
+      const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || '/admin';
+      navigate(from, { replace: true });
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : 'Unable to sign in. Please check your details.',
+          : 'Unable to sign in. Please check your credentials.',
       );
     } finally {
       setSubmitting(false);

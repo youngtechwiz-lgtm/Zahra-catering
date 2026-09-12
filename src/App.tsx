@@ -3,9 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import {
-  AboutPage, AdminCollectionPage, AdminDashboard, AdminSettingsPage, HomePage, NotFoundPage,
-} from '@/pages/site';
+import { AboutPage, HomePage, NotFoundPage } from '@/pages/site';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import {
   ContactLivePage,
@@ -17,7 +15,18 @@ import {
 } from '@/pages/live-pages';
 import { AdminLoginLivePage } from '@/pages/admin-login-live';
 import { ProtectedAdminRoute } from '@/components/protected-admin-route';
-import { AdminBookingsLivePage, AdminSettingsLivePage } from '@/pages/admin-live';
+import {
+  AdminBookingsLivePage,
+  AdminCategoriesLivePage,
+  AdminDashboardLivePage,
+  AdminEventsLivePage,
+  AdminGalleryLivePage,
+  AdminMenuLivePage,
+  AdminServicesLivePage,
+  AdminSettingsLivePage,
+  AdminTestimonialsLivePage,
+} from '@/pages/admin-live';
+import { AuthProvider } from '@/context/AuthContext';
 
 const queryClient = new QueryClient();
 
@@ -27,30 +36,118 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
 }
 
 function Router() {
-  return <RoutedErrorBoundary><Routes>
-    <Route path="/" element={<HomePage />} />
-    <Route path="/about" element={<AboutPage />} />
-    <Route path="/services" element={<ServicesLivePage />} />
-    <Route path="/menu" element={<MenuLivePage />} />
-    <Route path="/gallery" element={<GalleryLivePage />} />
-    <Route path="/events" element={<EventsLivePage />} />
-    <Route path="/testimonials" element={<TestimonialsLivePage />} />
-    <Route path="/contact" element={<ContactLivePage />} />
-    <Route path="/admin/login" element={<AdminLoginLivePage />} />
-    <Route path="/admin" element={<ProtectedAdminRoute><AdminDashboard /></ProtectedAdminRoute>} />
-    <Route path="/admin/menu" element={<ProtectedAdminRoute><AdminCollectionPage type="menu" /></ProtectedAdminRoute>} />
-    <Route path="/admin/services" element={<ProtectedAdminRoute><AdminCollectionPage type="services" /></ProtectedAdminRoute>} />
-    <Route path="/admin/gallery" element={<ProtectedAdminRoute><AdminCollectionPage type="gallery" /></ProtectedAdminRoute>} />
-    <Route path="/admin/events" element={<ProtectedAdminRoute><AdminCollectionPage type="events" /></ProtectedAdminRoute>} />
-    <Route path="/admin/testimonials" element={<ProtectedAdminRoute><AdminCollectionPage type="testimonials" /></ProtectedAdminRoute>} />
-    <Route path="/admin/bookings" element={<ProtectedAdminRoute><AdminBookingsLivePage /></ProtectedAdminRoute>} />
-    <Route path="/admin/settings" element={<ProtectedAdminRoute><AdminSettingsLivePage /></ProtectedAdminRoute>} />
-    <Route path="*" element={<NotFoundPage />} />
-  </Routes></RoutedErrorBoundary>;
+  return (
+    <RoutedErrorBoundary>
+      <Routes>
+        {/* Public Live Pages */}
+        <Route path="/" element={<HomePage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/services" element={<ServicesLivePage />} />
+        <Route path="/menu" element={<MenuLivePage />} />
+        <Route path="/gallery" element={<GalleryLivePage />} />
+        <Route path="/events" element={<EventsLivePage />} />
+        <Route path="/testimonials" element={<TestimonialsLivePage />} />
+        <Route path="/contact" element={<ContactLivePage />} />
+
+        {/* Admin Login */}
+        <Route path="/admin/login" element={<AdminLoginLivePage />} />
+
+        {/* Dedicated Admin CMS Live Pages */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedAdminRoute>
+              <AdminDashboardLivePage />
+            </ProtectedAdminRoute>
+          }
+        />
+        <Route
+          path="/admin/bookings"
+          element={
+            <ProtectedAdminRoute>
+              <AdminBookingsLivePage />
+            </ProtectedAdminRoute>
+          }
+        />
+        <Route
+          path="/admin/menu"
+          element={
+            <ProtectedAdminRoute>
+              <AdminMenuLivePage />
+            </ProtectedAdminRoute>
+          }
+        />
+        <Route
+          path="/admin/categories"
+          element={
+            <ProtectedAdminRoute>
+              <AdminCategoriesLivePage />
+            </ProtectedAdminRoute>
+          }
+        />
+        <Route
+          path="/admin/services"
+          element={
+            <ProtectedAdminRoute>
+              <AdminServicesLivePage />
+            </ProtectedAdminRoute>
+          }
+        />
+        <Route
+          path="/admin/gallery"
+          element={
+            <ProtectedAdminRoute>
+              <AdminGalleryLivePage />
+            </ProtectedAdminRoute>
+          }
+        />
+        <Route
+          path="/admin/events"
+          element={
+            <ProtectedAdminRoute>
+              <AdminEventsLivePage />
+            </ProtectedAdminRoute>
+          }
+        />
+        <Route
+          path="/admin/testimonials"
+          element={
+            <ProtectedAdminRoute>
+              <AdminTestimonialsLivePage />
+            </ProtectedAdminRoute>
+          }
+        />
+        <Route
+          path="/admin/settings"
+          element={
+            <ProtectedAdminRoute>
+              <AdminSettingsLivePage />
+            </ProtectedAdminRoute>
+          }
+        />
+
+        {/* 404 Not Found */}
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </RoutedErrorBoundary>
+  );
 }
 
 function App() {
-  return <QueryClientProvider client={queryClient}><TooltipProvider><BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></BrowserRouter><Toaster /></TooltipProvider></QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <AuthProvider>
+          <BrowserRouter
+            basename={import.meta.env.BASE_URL.replace(/\/$/, '')}
+          >
+            <Router />
+          </BrowserRouter>
+          <Toaster />
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
 }
 
 export default App;
