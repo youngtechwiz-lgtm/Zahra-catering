@@ -4,4 +4,4 @@ dist/
 .env.local
 .env.*.local
 *.tsbuildinfo
-.replit-artifact/
+.replit-artifact/node_modules/
